@@ -51,7 +51,7 @@ curl http://localhost:8000/health
 
 ## 📊 Expected Results
 
-### Sample Response Format
+### Sample Response Format (Short Audio)
 ```json
 {
   "transcription": "Habari za asubuhi, hali ya hewa ni nzuri leo",
@@ -64,11 +64,26 @@ curl http://localhost:8000/health
 }
 ```
 
+### Sample Response Format (Long Audio)
+```json
+{
+  "transcription": "Full transcription from all chunks combined...",
+  "sentiment": {
+    "label": "POSITIVE",
+    "score": 0.85
+  },
+  "summary": "Aggregated summary from multiple chunks",
+  "processing_time": 12.34,
+  "chunks_processed": 4
+}
+```
+
 ### Performance Expectations
 - **First Run**: 30-60 seconds (model loading)
-- **Subsequent Runs**: 2-5 seconds
+- **Short Audio (< 30s)**: 2-5 seconds
+- **Long Audio (> 30s)**: 5-15 seconds (chunked processing)
 - **Memory Usage**: 2-4GB RAM
-- **Audio Length**: Optimal < 2 minutes
+- **Audio Length**: Now supports any length with chunking
 
 ## ⚠️ Common Issues & Solutions
 
@@ -100,16 +115,24 @@ WARNING: Invalid HTTP request received.
 ## 🔧 Testing Scenarios
 
 ### 1. Short Audio (< 30 seconds)
-- Expected: Fast processing, complete transcription
+- Expected: Fast processing, complete transcription, no chunking
 - Test with: Greetings, short phrases
+- Response: Standard format without `chunks_processed`
 
 ### 2. Medium Audio (30 seconds - 2 minutes)
-- Expected: Good accuracy, possible truncation warning
+- Expected: Chunked processing, complete transcription, no truncation
 - Test with: Conversations, stories
+- Response: Includes `chunks_processed` field
 
 ### 3. Long Audio (> 2 minutes)
-- Expected: Truncation warnings, slower processing
+- Expected: Multiple chunks, full transcription, aggregated results
 - Test with: Speeches, long recordings
+- Response: Higher `chunks_processed` count, longer processing time
+
+### 4. Very Long Text (> 512 tokens)
+- Expected: Text chunking for sentiment/summary, no truncation warnings
+- Test with: Long speeches, detailed conversations
+- Response: Aggregated sentiment and combined summaries
 
 ### 4. Different Audio Formats
 - **Supported**: .wav, .mp3, .m4a, .flac
@@ -154,6 +177,27 @@ free -h
 lsof -i :8000
 # Kill process if needed
 kill -9 <PID>
+```
+
+## 🔧 New Chunking Features
+
+### Audio Chunking
+- **Automatic Detection**: Files > 30 seconds are automatically chunked
+- **Overlap Processing**: 10% overlap between chunks for continuity
+- **Seamless Combination**: Transcriptions are intelligently merged
+
+### Text Chunking  
+- **Token Limit Handling**: Texts > 512 tokens are automatically chunked
+- **Sentence Preservation**: Chunks respect sentence boundaries
+- **Result Aggregation**: Sentiments averaged, summaries combined
+
+### Processing Indicators
+```bash
+# Look for these log messages:
+INFO: Processing long audio with chunking
+INFO: Processing audio chunk 1/3
+INFO: Processing long text with chunking
+INFO: Processing text chunk 1/2
 ```
 
 ## 🔄 Development Testing
