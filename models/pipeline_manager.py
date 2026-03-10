@@ -2,8 +2,10 @@ import asyncio
 import time
 from transformers import pipeline
 import librosa
-from typing import Dict, Any
+import soundfile as sf
+from typing import Dict, Any, List
 import logging
+from .chunking_utils import AudioChunker, TextChunker, ResultAggregator
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -13,9 +15,13 @@ class AudioProcessingPipeline:
     
     def __init__(self):
         self.models_loaded = False
+        self.audio_chunker = AudioChunker(chunk_duration=30, overlap=0.1)
+        self.text_chunker = TextChunker(max_tokens=400)
+        self.aggregator = ResultAggregator()
         self.asr_pipeline = None
         self.sentiment_pipeline = None
         self.summarization_pipeline = None
+        self._load_models()  # Load models on initialization
     
     def _load_models(self):
         """Load all required models"""
@@ -46,34 +52,101 @@ class AudioProcessingPipeline:
             raise
     
     async def process_audio(self, audio_path: str) -> Dict[str, Any]:
-        """Process audio file through complete pipeline"""
+        """Process audio file through complete pipeline with chunking support"""
         if not self.models_loaded:
             self._load_models()
         
         start_time = time.time()
         
         try:
-            # Step 1: Speech Recognition
-            transcription = await self._transcribe_audio(audio_path)
-            
-            # Step 2: Sentiment Analysis
-            sentiment = await self._analyze_sentiment(transcription)
-            
-            # Step 3: Text Summarization
-            summary = await self._summarize_text(transcription)
-            
-            processing_time = time.time() - start_time
-            
-            return {
-                "transcription": transcription,
-                "sentiment": sentiment,
-                "summary": summary,
-                "processing_time": round(processing_time, 2)
-            }
+            # Check if audio needs chunking
+            if self.audio_chunker.should_chunk_audio(audio_path):
+                logger.info("Processing long audio with chunking")
+                return await self._process_long_audio(audio_path, start_time)
+            else:
+                logger.info("Processing short audio normally")
+                return await self._process_short_audio(audio_path, start_time)
             
         except Exception as e:
             logger.error(f"Pipeline processing error: {e}")
             raise
+    
+    async def _process_short_audio(self, audio_path: str, start_time: float) -> Dict[str, Any]:
+        """Process short audio using original method"""
+        # Step 1: Speech Recognition
+        transcription = await self._transcribe_audio(audio_path)
+        
+        # Step 2: Sentiment Analysis
+        sentiment = await self._analyze_sentiment(transcription)
+        
+        # Step 3: Text Summarization
+        summary = await self._summarize_text(transcription)
+        
+        processing_time = time.time() - start_time
+        
+        return {
+            "transcription": transcription,
+            "sentiment": sentiment,
+            "summary": summary,
+            "processing_time": round(processing_time, 2)
+        }
+    
+    async def _process_long_audio(self, audio_path: str, start_time: float) -> Dict[str, Any]:
+        """Process long audio using chunking strategy"""
+        # Step 1: Chunk audio and transcribe each chunk
+        audio_chunks = self.audio_chunker.chunk_audio(audio_path)
+        transcriptions = []
+        
+        for i, chunk in enumerate(audio_chunks):
+            logger.info(f"Processing audio chunk {i+1}/{len(audio_chunks)}")
+            transcription = await self._transcribe_audio_chunk(chunk)
+            transcriptions.append(transcription)
+        
+        # Combine transcriptions
+        full_transcription = self.aggregator.combine_transcriptions(transcriptions)
+        
+        # Step 2: Process text with chunking if needed
+        if self.text_chunker.should_chunk_text(full_transcription):
+            logger.info("Processing long text with chunking")
+            sentiment, summary = await self._process_long_text(full_transcription)
+        else:
+            sentiment = await self._analyze_sentiment(full_transcription)
+            summary = await self._summarize_text(full_transcription)
+        
+        processing_time = time.time() - start_time
+        
+        return {
+            "transcription": full_transcription,
+            "sentiment": sentiment,
+            "summary": summary,
+            "processing_time": round(processing_time, 2),
+            "chunks_processed": len(audio_chunks)
+        }
+    
+    async def _process_long_text(self, text: str) -> tuple:
+        """Process long text using chunking for sentiment and summarization"""
+        text_chunks = self.text_chunker.chunk_text(text)
+        
+        # Process each chunk
+        sentiments = []
+        summaries = []
+        
+        for i, chunk in enumerate(text_chunks):
+            logger.info(f"Processing text chunk {i+1}/{len(text_chunks)}")
+            
+            # Analyze sentiment for each chunk
+            sentiment = await self._analyze_sentiment(chunk)
+            sentiments.append(sentiment)
+            
+            # Summarize each chunk
+            summary = await self._summarize_text(chunk)
+            summaries.append(summary)
+        
+        # Aggregate results
+        final_sentiment = self.aggregator.aggregate_sentiments(sentiments)
+        final_summary = self.aggregator.combine_summaries(summaries)
+        
+        return final_sentiment, final_summary
     
     async def _transcribe_audio(self, audio_path: str) -> str:
         """Convert audio to text using ASR model"""
@@ -93,6 +166,22 @@ class AudioProcessingPipeline:
         except Exception as e:
             logger.error(f"ASR error: {e}")
             return "Transcription failed"
+    
+    async def _transcribe_audio_chunk(self, audio_chunk) -> str:
+        """Convert audio chunk to text using ASR model"""
+        try:
+            # Run ASR in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, 
+                lambda: self.asr_pipeline(audio_chunk)
+            )
+            
+            return result["text"]
+            
+        except Exception as e:
+            logger.error(f"ASR chunk error: {e}")
+            return ""
     
     async def _analyze_sentiment(self, text: str) -> Dict[str, Any]:
         """Analyze sentiment of text"""
@@ -129,7 +218,7 @@ class AudioProcessingPipeline:
                 None,
                 lambda: self.summarization_pipeline(
                     input_text,
-                    max_length=100,
+                    max_new_tokens=256,
                     min_length=20,
                     do_sample=False
                 )

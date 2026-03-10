@@ -148,6 +148,61 @@ curl -X POST "http://localhost:8000/process-audio" \
 - Internet connection for model downloads
 - Modern web browser with audio support
 
+## 🌍 Environment Specifications
+
+### Development Environment (Tested)
+```bash
+# System Information
+OS: Ubuntu 24.04 LTS (Linux 6.17.0-14-generic)
+Architecture: x86_64
+Python: 3.12.2
+pip: 25.2
+
+# Core Dependencies (Installed Versions)
+fastapi==0.128.0
+uvicorn==0.40.0
+python-multipart==0.0.6
+transformers==4.57.3
+torch==2.9.1
+torchaudio==2.9.1
+librosa==0.11.0
+soundfile==0.13.1
+numpy==2.3.5
+```
+
+### Virtual Environment Setup
+```bash
+# Environment name: sema-deployed
+# Created with: python3 -m venv sema-deployed
+# Activation: source sema-deployed/bin/activate
+```
+
+### Minimum Requirements
+```bash
+Python: 3.8+
+RAM: 4GB (8GB recommended)
+Disk Space: 10GB (for models and dependencies)
+CPU: 2+ cores (4+ recommended)
+GPU: Optional (CUDA-compatible for faster processing)
+```
+
+### System Dependencies (Linux/Ubuntu)
+```bash
+# Audio processing libraries
+sudo apt-get update
+sudo apt-get install -y \
+    libsndfile1 \
+    ffmpeg \
+    portaudio19-dev \
+    python3-dev
+```
+
+### Compatibility Notes
+- **Linux**: Fully tested on Ubuntu 24.04 LTS
+- **macOS**: Compatible (requires Xcode command line tools)
+- **Windows**: Compatible (requires Visual C++ redistributables)
+- **Python Versions**: Tested on 3.12.2, compatible with 3.8+
+
 ## 🐛 Troubleshooting
 
 ### Common Issues
@@ -163,7 +218,7 @@ Check console output for detailed error messages and processing status.
 
 ### Local Development
 ```bash
-git clone https://github.com/yourusername/kiswahili-audio-pipeline.git
+git clone https://github.com/Kevinobote/Kiswahili-Kitukuzwe.git
 cd kiswahili-audio-pipeline
 chmod +x setup_env.sh
 ./setup_env.sh
@@ -216,10 +271,10 @@ If you use this work in your research, please cite:
   title={A Novel Kiswahili Audio Processing Pipeline},
   author={Your Name},
   year={2024},
-  howpublished={\url{https://github.com/yourusername/kiswahili-audio-pipeline}}
+  howpublished={\url{https://github.com/Kevinobote/Kiswahili-Kitukuzwe}}
 }
 ```
 
 ## 📞 Contact
 
-For questions about this research project, please open an issue or contact [your.email@domain.com](mailto:your.email@domain.com).
+For questions about this research project, please open an issue or contact [your.email@domain.com](mailto:kevin.obote@strathmore.edu).
